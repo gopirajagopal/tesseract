@@ -1,0 +1,67 @@
+# General English continued pre-training
+# Resume from checkpoints/small/step_00010000 on WikiText-103 + TinyStories.
+# Target: 100k additional steps → ~3.3B tokens seen (much more language coverage).
+#
+# Run:
+#   python train.py --config configs/general.yaml \
+#                   --resume checkpoints/small/step_00010000
+
+model:
+  vocab_size: 8192
+  max_seq_len: 1024
+  hidden_size: 768
+  num_layers: 12
+  num_attention_heads: 12
+  num_key_value_heads: 4
+  intermediate_size: 2048
+  rms_norm_eps: 1.0e-5
+  rope_theta: 10000.0
+  attention_dropout: 0.0
+  hidden_dropout: 0.0
+  use_bias: false
+  tie_word_embeddings: true
+  use_flash_attention: true
+  use_gradient_checkpointing: false
+  initializer_range: 0.02
+
+training:
+  # Lower LR for continued pre-training (avoids catastrophic forgetting)
+  learning_rate: 1.0e-4
+  min_learning_rate: 1.0e-5
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  warmup_steps: 200        # short warmup since we resume from a trained model
+  max_steps: 60000         # 50k more steps = ~1.6B tokens with batch 32, seq 1024
+  batch_size: 32
+  gradient_accumulation_steps: 4
+  micro_batch_size: 8
+  dtype: bfloat16
+  save_every_steps: 2000
+  eval_every_steps: 2000
+  log_every_steps: 10
+  checkpoint_dir: checkpoints/general
+  keep_last_n_checkpoints: 3
+  data_dir: data/general   # WikiText-103 + TinyStories .bin files
+  val_split: 0.005
+  num_workers: 0           # 0 = Windows safe
+
+rlhf:
+  sft_learning_rate: 2.0e-5
+  sft_epochs: 3
+  sft_batch_size: 4
+  rm_learning_rate: 2.0e-5
+  rm_epochs: 2
+  rm_batch_size: 4
+  dpo_beta: 0.1
+  dpo_learning_rate: 5.0e-7
+  dpo_epochs: 1
+  ppo_learning_rate: 1.0e-5
+  ppo_epochs: 4
+  ppo_batch_size: 32
+  ppo_mini_batch_size: 4
+  kl_coef: 0.1
+  clip_range: 0.2
+  target_kl: 0.1
+  num_cai_revisions: 2

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LLM Chat</title>
+  <style>
+    /* ─── reset ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #212121; color: #ececec; font-family: -apple-system, 'Segoe UI', sans-serif; }
+
+    /* ─── layout ─────────────────────────────────── */
+    body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* ─── header ─────────────────────────────────── */
+    header {
+      flex-shrink: 0;
+      height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px;
+      background: #2a2a2a;
+      border-bottom: 1px solid #333;
+    }
+    .header-title {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 15px; font-weight: 600; color: #ececec;
+    }
+    .header-title .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #10a37f;
+      box-shadow: 0 0 6px #10a37f88;
+    }
+    .header-actions { display: flex; gap: 6px; align-items: center; }
+    .icon-btn {
+      width: 34px; height: 34px; border-radius: 7px;
+      border: none; background: transparent;
+      cursor: pointer; color: #999;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s, color .15s;
+    }
+    .icon-btn:hover { background: #333; color: #ececec; }
+    .icon-btn svg { width: 18px; height: 18px; }
+    #status-dot {
+      font-size: 12px; color: #666;
+      padding: 4px 10px; background: #2f2f2f; border-radius: 20px;
+      border: 1px solid #383838;
+    }
+
+    /* ─── messages pane ──────────────────────────── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0 8px;
+    }
+    #messages::-webkit-scrollbar { width: 6px; }
+    #messages::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+    .msg-row {
+      display: flex;
+      padding: 6px 0;
+      max-width: 780px;
+      margin: 0 auto;
+      padding-left: 16px; padding-right: 16px;
+      gap: 12px;
+    }
+
+    /* avatar */
+    .avatar {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .avatar.user { background: #4a4a4a; color: #ccc; }
+    .avatar.ai   { background: #10a37f; color: #fff; }
+
+    /* bubble */
+    .bubble {
+      flex: 1; min-width: 0;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.75;
+      word-break: break-word;
+      /* Preserve all whitespace and indentation */
+      white-space: pre-wrap;
+    }
+    .bubble.user {
+      background: #2f2f2f;
+      border: 1px solid #383838;
+      color: #ececec;
+    }
+    .bubble.ai {
+      background: transparent;
+      color: #ececec;
+    }
+
+    /* inline code inside bubble */
+    .bubble code.ic {
+      background: #2d2d2d;
+      border: 1px solid #404040;
+      color: #e5c07b;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Menlo', monospace;
+      font-size: 0.88em;
+      white-space: nowrap;
+    }
+
+    /* fenced code block */
+    .code-wrap {
+      border-radius: 8px;
+      border: 1px solid #3a3a3a;
+      overflow: hidden;
+      margin: 6px 0;
+      background: #1a1a1a;
+      /* Reset whitespace so the pre inside handles its own */
+      white-space: normal;
+    }
+    .code-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 14px;
+      background: #252525;
+      border-bottom: 1px solid #3a3a3a;
+    }
+    .code-lang-label { font-size: 11px; color: #666; font-family: monospace; }
+    .copy-code-btn {
+      font-size: 11px; color: #777; background: none; border: none;
+      cursor: pointer; padding: 2px 8px; border-radius: 4px;
+      display: flex; align-items: center; gap: 4px;
+      transition: background .15s, color .15s;
+    }
+    .copy-code-btn:hover { background: #333; color: #ccc; }
+    .copy-code-btn.ok { color: #10a37f; }
+    .code-wrap pre {
+      margin: 0; padding: 14px 16px;
+      background: #1a1a1a;
+      overflow-x: auto;
+      font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+      font-size: 13px; line-height: 1.65;
+      color: #d4d4d4;
+      white-space: pre;        /* hard pre — no wrapping, full indent */
+      word-break: normal;
+      tab-size: 4;
+    }
+
+    /* generating cursor */
+    .cursor {
+      display: inline-block; width: 2px; height: 14px;
+      background: #10a37f; vertical-align: middle;
+      margin-left: 2px;
+      animation: blink .9s step-end infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* welcome screen */
+    #welcome {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 100%; gap: 14px; text-align: center;
+      padding: 40px 20px;
+    }
+    #welcome h1 { font-size: 26px; font-weight: 700; color: #ececec; }
+    #welcome p  { font-size: 14px; color: #777; max-width: 380px; }
+    .suggestions {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      justify-content: center; max-width: 520px;
+      margin-top: 8px;
+    }
+    .sug-chip {
+      padding: 8px 16px;
+      background: #2a2a2a; border: 1px solid #383838;
+      border-radius: 20px; font-size: 13px; color: #aaa;
+      cursor: pointer; transition: border-color .15s, color .15s;
+    }
+    .sug-chip:hover { border-color: #10a37f; color: #ececec; }
+
+    /* ─── input area ─────────────────────────────── */
+    #input-area {
+      flex-shrink: 0;
+      padding: 12px 16px 16px;
+      background: #212121;
+    }
+    .input-box {
+      max-width: 780px; margin: 0 auto;
+      background: #2a2a2a;
+      border: 1px solid #404040;
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex; align-items: flex-end; gap: 10px;
+      transition: border-color .2s;
+    }
+    .input-box:focus-within { border-color: #10a37f55; }
+    #user-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: #ececec; font-size: 14px; font-family: inherit;
+      resize: none; line-height: 1.5;
+      min-height: 24px; max-height: 160px;
+      overflow-y: auto; padding: 2px 0;
+    }
+    #user-input::placeholder { color: #555; }
+    #user-input::-webkit-scrollbar { width: 4px; }
+    #user-input::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+    #send-btn {
+      width: 34px; height: 34px; flex-shrink: 0;
+      border-radius: 8px; border: none;
+      background: #10a37f; color: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s, opacity .15s;
+    }
+    #send-btn:hover { background: #0d8c6c; }
+    #send-btn:disabled { opacity: .35; cursor: not-allowed; }
+    #send-btn svg { width: 16px; height: 16px; }
+    .input-hint {
+      text-align: center; font-size: 11px; color: #444;
+      margin-top: 6px;
+    }
+
+    /* ─── settings modal ─────────────────────────── */
+    .modal-bg {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.6); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: #2a2a2a; border: 1px solid #404040;
+      border-radius: 14px; padding: 24px; width: 360px;
+      max-width: 92vw;
+    }
+    .modal h2 { font-size: 15px; font-weight: 600; margin-bottom: 18px; }
+    .setting { margin-bottom: 16px; }
+    .setting label {
+      display: flex; justify-content: space-between;
+      font-size: 13px; color: #aaa; margin-bottom: 6px;
+    }
+    .setting label span { color: #10a37f; font-family: monospace; font-size: 13px; }
+    .setting input[type=range] { width: 100%; accent-color: #10a37f; cursor: pointer; }
+    .modal-close {
+      width: 100%; margin-top: 8px;
+      padding: 9px; border: none; border-radius: 8px;
+      background: #10a37f; color: #fff; font-size: 14px;
+      cursor: pointer; transition: background .15s;
+    }
+    .modal-close:hover { background: #0d8c6c; }
+  </style>
+</head>
+<body>
+
+<!-- header -->
+<header>
+  <div class="header-title">
+    <div class="dot"></div>
+    LLM Chat
+  </div>
+  <div class="header-actions">
+    <span id="status-dot">Connecting…</span>
+    <button class="icon-btn" onclick="clearChat()" title="Clear conversation">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+      </svg>
+    </button>
+    <button class="icon-btn" onclick="openModal()" title="Settings">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- messages -->
+<div id="messages">
+  <div id="welcome">
+    <h1>LLM Chat</h1>
+    <p>A language model trained from scratch. Ask anything — the model is still learning.</p>
+    <div class="suggestions">
+      <div class="sug-chip" onclick="send('What is machine learning?')">What is machine learning?</div>
+      <div class="sug-chip" onclick="send('Tell me a short story')">Tell me a short story</div>
+      <div class="sug-chip" onclick="send('Explain what a neural network is')">What is a neural network?</div>
+      <div class="sug-chip" onclick="send('Write a Python hello world')">Python hello world</div>
+    </div>
+  </div>
+</div>
+
+<!-- input -->
+<div id="input-area">
+  <div class="input-box">
+    <textarea id="user-input" rows="1"
+      placeholder="Send a message…"
+      oninput="autoResize(this)"
+      onkeydown="onKey(event)"></textarea>
+    <button id="send-btn" onclick="sendMessage()">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+      </svg>
+    </button>
+  </div>
+  <div class="input-hint">Enter to send · Shift+Enter for new line</div>
+</div>
+
+<!-- settings modal -->
+<div class="modal-bg" id="modal-bg" onclick="bgClick(event)">
+  <div class="modal">
+    <h2>Generation Settings</h2>
+    <div class="setting">
+      <label>Temperature <span id="v-temp">0.40</span></label>
+      <input type="range" id="s-temp" min="0" max="2" step="0.05" value="0.4"
+        oninput="document.getElementById('v-temp').textContent=parseFloat(this.value).toFixed(2)">
+    </div>
+    <div class="setting">
+      <label>Top-p <span id="v-topp">0.85</span></label>
+      <input type="range" id="s-topp" min="0" max="1" step="0.05" value="0.85"
+        oninput="document.getElementById('v-topp').textContent=parseFloat(this.value).toFixed(2)">
+    </div>
+    <div class="setting">
+      <label>Top-k <span id="v-topk">40</span></label>
+      <input type="range" id="s-topk" min="1" max="200" step="1" value="40"
+        oninput="document.getElementById('v-topk').textContent=this.value">
+    </div>
+    <div class="setting">
+      <label>Max tokens <span id="v-maxt">256</span></label>
+      <input type="range" id="s-maxt" min="32" max="1024" step="32" value="256"
+        oninput="document.getElementById('v-maxt').textContent=this.value">
+    </div>
+    <button class="modal-close" onclick="closeModal()">Done</button>
+  </div>
+</div>
+
+<script>
+/* ── state ──────────────────────────────────────── */
+let history     = [];   // [{role, content}]
+let generating  = false;
+
+/* ── health ─────────────────────────────────────── */
+async function ping() {
+  try {
+    const r = await fetch('/health');
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById('status-dot').textContent =
+      '● ' + (d.device || 'cpu').toUpperCase();
+    document.getElementById('status-dot').style.color = '#10a37f';
+  } catch {
+    document.getElementById('status-dot').textContent = '● Offline';
+    document.getElementById('status-dot').style.color = '#e55';
+  }
+}
+ping();
+
+/* ── settings modal ──────────────────────────────── */
+function openModal()  { document.getElementById('modal-bg').classList.add('open'); }
+function closeModal() { document.getElementById('modal-bg').classList.remove('open'); }
+function bgClick(e)   { if (e.target === e.currentTarget) closeModal(); }
+
+function settings() {
+  return {
+    temperature:    parseFloat(document.getElementById('s-temp').value),
+    top_p:          parseFloat(document.getElementById('s-topp').value),
+    top_k:          parseInt(document.getElementById('s-topk').value),
+    max_new_tokens: parseInt(document.getElementById('s-maxt').value),
+  };
+}
+
+/* ── input helpers ───────────────────────────────── */
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
+function onKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function send(text) {   /* called from suggestion chips */
+  document.getElementById('user-input').value = text;
+  sendMessage();
+}
+
+function clearChat() {
+  if (generating) return;
+  history = [];
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = `<div id="welcome">
+    <h1>LLM Chat</h1>
+    <p>Conversation cleared. Ask anything.</p>
+    <div class="suggestions">
+      <div class="sug-chip" onclick="send('What is machine learning?')">What is machine learning?</div>
+      <div class="sug-chip" onclick="send('Tell me a short story')">Tell me a short story</div>
+      <div class="sug-chip" onclick="send('Explain what a neural network is')">What is a neural network?</div>
+      <div class="sug-chip" onclick="send('Write a Python hello world')">Python hello world</div>
+    </div>
+  </div>`;
+}
+
+/* ── text formatting ─────────────────────────────── */
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* Render plain text spans inside a bubble.
+   Handles inline `code`, **bold**, *italic*.
+   white-space:pre-wrap on the bubble means \n = line break, spaces = spaces.
+   We do NOT call .replace(/\n/g,'<br>') — the CSS handles it. */
+function renderInline(s) {
+  return esc(s)
+    .replace(/`([^`\n]+)`/g, '<code class="ic">$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+const COPY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>`;
+
+function copyBlock(btn, id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.innerText).then(() => {
+    btn.classList.add('ok');
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.classList.remove('ok'); btn.innerHTML = COPY_SVG + ' Copy'; }, 2000);
+  });
+}
+
+/* Render full AI text: handles fenced code blocks + inline formatting.
+   Split on ``` fences. For unclosed fences (streaming), render a partial block. */
+function renderAI(text) {
+  const parts  = [];
+  const fenced = /```(\w*)\n?([\s\S]*?)```/g;
+  let last = 0, m;
+
+  while ((m = fenced.exec(text)) !== null) {
+    // text before this block
+    if (m.index > last) parts.push(renderInline(text.slice(last, m.index)));
+    const lang = (m[1] || 'text').toLowerCase();
+    const code = m[2].replace(/\n$/, '');
+    const id   = 'cb-' + Math.random().toString(36).slice(2);
+    parts.push(codeBlock(lang, code, id, false));
+    last = m.index + m[0].length;
+  }
+
+  const tail = text.slice(last);
+  // detect unclosed fence at end (still streaming)
+  const open = /```(\w*)\n?([\s\S]*)$/.exec(tail);
+  if (open) {
+    if (open.index > 0) parts.push(renderInline(tail.slice(0, open.index)));
+    parts.push(codeBlock((open[1] || 'text').toLowerCase(), open[2], null, true));
+  } else {
+    if (tail) parts.push(renderInline(tail));
+  }
+
+  return parts.join('');
+}
+
+function codeBlock(lang, code, id, generating) {
+  const codeId   = id || ('cb-' + Math.random().toString(36).slice(2));
+  const topRight = generating
+    ? `<span style="font-size:11px;color:#10a37f">generating…</span>`
+    : `<button class="copy-code-btn" onclick="copyBlock(this,'${codeId}')">${COPY_SVG} Copy</button>`;
+  return `<div class="code-wrap">
+  <div class="code-topbar">
+    <span class="code-lang-label">${lang}</span>
+    ${topRight}
+  </div>
+  <pre><code id="${codeId}">${esc(code)}</code></pre>
+</div>`;
+}
+
+/* ── DOM helpers ─────────────────────────────────── */
+function removeWelcome() {
+  const w = document.getElementById('welcome');
+  if (w) w.remove();
+}
+
+function appendRow(role, content, streaming) {
+  const msgs   = document.getElementById('messages');
+  const isUser = role === 'user';
+
+  const row    = document.createElement('div');
+  row.className = 'msg-row';
+
+  const av = document.createElement('div');
+  av.className = 'avatar ' + (isUser ? 'user' : 'ai');
+  av.textContent = isUser ? 'You' : 'AI';
+
+  const bub = document.createElement('div');
+  bub.className = 'bubble ' + (isUser ? 'user' : 'ai');
+  /* Inline style ensures whitespace is always preserved even if CSS gets
+     overridden by a browser extension or CDN stylesheet. */
+  bub.style.whiteSpace = 'pre-wrap';
+  bub.style.wordBreak  = 'break-word';
+
+  const id = 'bub-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  bub.id = id;
+
+  if (streaming) {
+    bub.innerHTML = '<span class="cursor"></span>';
+  } else if (isUser) {
+    bub.textContent = content;   // plain text — safest, no XSS
+  } else {
+    bub.innerHTML = renderAI(content);
+  }
+
+  row.appendChild(av);
+  row.appendChild(bub);
+  msgs.appendChild(row);
+  msgs.scrollTop = msgs.scrollHeight;
+  return id;
+}
+
+/* ── send ────────────────────────────────────────── */
+async function sendMessage() {
+  if (generating) return;
+
+  const inp  = document.getElementById('user-input');
+  const text = inp.value.trim();
+  if (!text) return;
+
+  removeWelcome();
+  inp.value = '';
+  inp.style.height = 'auto';
+
+  appendRow('user', text);
+  history.push({ role: 'user', content: text });
+
+  const bubId  = appendRow('assistant', '', true);
+  const bubble = document.getElementById(bubId);
+
+  generating = true;
+  document.getElementById('send-btn').disabled = true;
+
+  let full = '';
+
+  try {
+    const res = await fetch('/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history, ...settings() }),
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buf     = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();   // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break;
+        try {
+          const obj = JSON.parse(payload);
+          if (obj.token) {
+            full += obj.token;
+            bubble.innerHTML = renderAI(full) + '<span class="cursor"></span>';
+            document.getElementById('messages').scrollTop = 1e9;
+          }
+        } catch { /* ignore malformed SSE chunks */ }
+      }
+    }
+
+    // final render — no cursor
+    bubble.innerHTML = renderAI(full || '…');
+    history.push({ role: 'assistant', content: full });
+
+  } catch (err) {
+    bubble.innerHTML = `<span style="color:#e55">Error: ${esc(err.message)}</span>`;
+  } finally {
+    generating = false;
+    document.getElementById('send-btn').disabled = false;
+    ping();
+  }
+}
+</script>
+</body>
+</html>

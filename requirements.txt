@@ -1,0 +1,30 @@
+# Core deep learning
+torch>=2.1.0
+torchvision>=0.16.0
+
+# Tokenization
+sentencepiece>=0.1.99
+tiktoken>=0.5.1
+
+# Data loading & processing
+datasets>=2.14.0
+numpy>=1.24.0
+
+# Configuration
+pyyaml>=6.0.1
+
+# Experiment tracking (optional)
+wandb>=0.16.0
+
+# Accelerated training (optional but recommended)
+# flash-attn>=2.3.0        # Flash Attention 2 (requires CUDA 11.6+, A100/H100)
+# deepspeed>=0.12.0        # ZeRO-3 for multi-node training
+# bitsandbytes>=0.41.0     # 8-bit Adam, quantization
+
+# Evaluation
+transformers>=4.35.0       # for evaluation benchmarks / tokenizer comparison
+accelerate>=0.24.0         # HuggingFace Accelerate for distributed training
+
+# Utilities
+tqdm>=4.65.0
+rich>=13.0.0

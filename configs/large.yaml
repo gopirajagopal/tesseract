@@ -1,0 +1,61 @@
+# Large model configuration — ~7B parameters
+# Requires: 4–8 × A100 80GB with FSDP or DeepSpeed ZeRO-3
+
+model:
+  vocab_size: 32000
+  max_seq_len: 4096
+  hidden_size: 4096
+  num_layers: 32
+  num_attention_heads: 32
+  num_key_value_heads: 8           # GQA: 4 Q heads per KV head
+  intermediate_size: 11008         # ≈ 2.7 × hidden_size
+  rms_norm_eps: 1.0e-5
+  rope_theta: 10000.0
+  attention_dropout: 0.0
+  hidden_dropout: 0.0
+  use_bias: false
+  tie_word_embeddings: false       # Don't tie at 7B — too large
+  use_flash_attention: true
+  use_gradient_checkpointing: true
+  initializer_range: 0.02
+
+training:
+  learning_rate: 1.5e-4
+  min_learning_rate: 1.5e-5
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  grad_clip: 1.0
+  warmup_steps: 10000
+  max_steps: 1000000
+  batch_size: 256
+  gradient_accumulation_steps: 16
+  micro_batch_size: 4
+  dtype: bfloat16
+  save_every_steps: 10000
+  eval_every_steps: 2000
+  log_every_steps: 10
+  checkpoint_dir: checkpoints/large
+  keep_last_n_checkpoints: 3
+  data_dir: data/processed
+  val_split: 0.001
+  num_workers: 16
+
+rlhf:
+  sft_learning_rate: 5.0e-6
+  sft_epochs: 2
+  sft_batch_size: 32
+  rm_learning_rate: 5.0e-6
+  rm_epochs: 1
+  rm_batch_size: 32
+  dpo_beta: 0.1
+  dpo_learning_rate: 1.0e-7
+  dpo_epochs: 1
+  ppo_learning_rate: 2.0e-6
+  ppo_epochs: 4
+  ppo_batch_size: 128
+  ppo_mini_batch_size: 16
+  kl_coef: 0.05
+  clip_range: 0.2
+  target_kl: 0.05
+  num_cai_revisions: 3
